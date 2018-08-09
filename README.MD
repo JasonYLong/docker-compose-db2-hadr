@@ -1,4 +1,4 @@
-#DB2 HADR docker compose guide
+## DB2 HADR docker compose guide
 
 ```
 #  file docker-entrypoint.sh Dockerfile                     are used for image db210506
@@ -38,7 +38,7 @@ ARG DB2EXPRESSC_SHA256=911301ee155c5c0edf0af15074b2f67a2f54a3f8c866b156aca0f9b6f
     #docker-compose up
 ```
 
-##删除容器
+## 删除容器
 
 ```
     #docker-compose down
