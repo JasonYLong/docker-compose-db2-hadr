@@ -17,7 +17,7 @@ RUN yum install -y \
 
 ENV DB2EXPRESSC_DATADIR /home/db2inst1/data
 
-ARG DB2EXPRESSC_URL=http://9.98.12.150/ftp/MIDDLEWARE/DB2/v10.5.0.6/v10.5fp6_linuxx64_server_t.tar.gz
+ARG DB2EXPRESSC_URL=http://****/ftp/MIDDLEWARE/DB2/v10.5.0.6/v10.5fp6_linuxx64_server_t.tar.gz
 ARG DB2EXPRESSC_SHA256=911301ee155c5c0edf0af15074b2f67a2f54a3f8c866b156aca0f9b6fbd93be8
 
 RUN curl -fSLo /tmp/v10.5fp6_linuxx64_server_t.tar.gz $DB2EXPRESSC_URL \
