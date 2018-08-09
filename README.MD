@@ -18,11 +18,12 @@ ARG DB2EXPRESSC_SHA256=911301ee155c5c0edf0af15074b2f67a2f54a3f8c866b156aca0f9b6f
 
 ```
 
-## 1创建docker-entrypoint.sh Dockerfile db2hadr1.sh db2hadr2.sh hadr1_init.sh hadr2_init.sh docker-compose.yml文件 ，可以考虑git拉下来
+## 1创建7个文件 ，可以用git拉下来
 
 ```
+    docker-entrypoint.sh Dockerfile db2hadr1.sh db2hadr2.sh hadr1_init.sh hadr2_init.sh docker-compose.yml
     #cd /tmp/data
-    #git clone ****
+    #git clone https://github.com/JasonYLong/docker-compose-db2-hadr.git
 ```
 
 ## 2.创建自定义db2 images
