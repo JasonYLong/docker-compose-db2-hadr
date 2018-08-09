@@ -1,0 +1,634 @@
+#
+#  Build docker image of db2 express-C v10.5 FP5 (64bit)
+#
+# # Authors:
+#   * Jason Yuan <lyuan@cn.ibm.com>
+#
+# Copyright 2015, IBM Corporation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Specify base OS with kernel 3.10.0
+# Options:
+#   centos:7
+
+
+FROM centos:7
+
+MAINTAINER Jason Yuan <lyuan@cn.ibm.com>
+
+###############################################################
+#
+#               System preparation for DB2
+#
+###############################################################
+
+RUN groupadd db2iadm1 && useradd -G db2iadm1 db2inst1 && groupadd db2fadm1 && useradd -G db2fadm1 db2fenc1
+
+# Required packages
+RUN yum install -y \
+    vi \
+    sudo \
+    passwd \
+    pam \
+    pam.i686 \
+    ncurses-libs.i686 \
+    file \
+    libaio \
+    libstdc++-devel.i686 \
+    numactl-libs \
+    which \
+    && yum clean all
+
+ENV DB2EXPRESSC_DATADIR /home/db2inst1/data
+
+# IMPORTANT Note:
+#  Due to compliance for IBM product, you have to host a downloaded DB2 Express-C Zip file yourself
+#  Here are suggested steps:
+#    1) Please download zip file of db2 express-c from http://www-01.ibm.com/software/data/db2/express-c/download.html
+#    2) Then upload it to a cloud storage like AWS S3 or IBM SoftLayer Object Storage
+#    3) Acquire a URL and SHA-256 hash of file and pass it via Docker's build time argument facility
+ARG DB2EXPRESSC_URL=http://9.98.12.150/ftp/MIDDLEWARE/DB2/v10.5.0.6/v10.5fp6_linuxx64_server_t.tar.gz
+ARG DB2EXPRESSC_SHA256=911301ee155c5c0edf0af15074b2f67a2f54a3f8c866b156aca0f9b6fbd93be8
+
+COPY db2server.rsp /tmp/db2server.rsp
+
+RUN curl -fSLo /tmp/v10.5fp6_linuxx64_server_t.tar.gz $DB2EXPRESSC_URL \
+    && echo "$DB2EXPRESSC_SHA256 /tmp/v10.5fp6_linuxx64_server_t.tar.gz" | sha256sum -c - \
+    && cd /tmp && tar xf v10.5fp6_linuxx64_server_t.tar.gz \
+    && /tmp/server_t/db2_install -b /opt/ibm/db2/V10.5 -p SERVER -n \
+    && rm -rf /tmp/server_t* && rm -rf /tmp/v10.5fp6* 
+
+#RUN su - db2inst1 -c "db2start;db2set DB2COMM=TCPIP;db2 create database hadr;db2stop force"
+
+#COPY docker-entrypoint.sh /entrypoint.sh
+#ENTRYPOINT ["/entrypoint.sh"]
+
+VOLUME $DB2EXPRESSC_DATADIR
+
+EXPOSE 50000
+
+#wget https://github.com/IMC3ofC/db2express-c.docker/blob/master/docker-entrypoint.sh
+
+# docker build -t db210506 .
+# docker run -itd -p 50000:50000 -h hadr1 --name hadr1 db210506
+
+# docker exec -it hadr1 bash
+echo '0 hadr1 0'> /home/db2inst1/sqllib/db2nodes.cfg
+
+db2 "get admin cfg" 
+db2 "update admin cfg using DB2SYSTEM hadr1
+/opt/ibm/db2/V10.5/adm/db2set -g DB2SYSTEM=hadr1
+
+with root
+/opt/ibm/db2/V10.5/instance/db2idrop db2inst1
+/opt/ibm/db2/V10.5/instance/dasdrop
+
+/opt/ibm/db2/V10.5/instance/dascrt -u dasusr1
+/opt/ibm/db2/V10.5/instance/db2icrt -u db2fenc1 db2inst1
+
+
+groupadd db2iadm1 && useradd -G db2iadm1 db2inst1
+groupadd db2fadm1 && useradd -G db2fadm1 db2fenc1
+
+groupadd dasadm1 && useradd -G dasadm1 dasusr1
+
+# docker run hadr1 "echo '0 hadr1 0'> /home/db2inst1/sqllib/db2nodes.cfg"
+
+
+
+
+#https://github.com/IMC3ofC/db2express-c.docker
+#https://hub.docker.com/r/ibmcom/db2express-c/
+
+#docker run -it -p 50000:50000 -e DB2INST1_PASSWORD=db2inst1-pwd -e LICENSE=accept ibmcom/db2express-c:latest bash
+#docker run -d -p 50000:50000 -e DB2INST1_PASSWORD=db2inst1-pwd -e LICENSE=accept  ibmcom/db2express-c:latest db2start
+#docker run -it -p 50000:50000 -e DB2INST1_PASSWORD=db2inst1-pwd -e LICENSE=accept   -v  $(pwd):/share  ibmcom/db2express-c:latest bash
+
+#docker run --name db2expc -d -p 50000:50000 -e DB2INST1_PASSWORD=db2inst1-pwd -e LICENSE=accept db2express-c:latest -d
+#docker exec -it db2expc  bash
+#su - db2inst1
+#db2sampl
+
+# DB2EXPRESSC_URL http://9.98.12.150/ftp/MIDDLEWARE/DB2/v10.5.0.6/v10.5fp6_linuxx64_server_t.tar.gz 
+# DB2EXPRESSC_SHA256 
+# sha256sum v10.5fp6_linuxx64_server_t.tar.gz
+# 911301ee155c5c0edf0af15074b2f67a2f54a3f8c866b156aca0f9b6fbd93be8  v10.5fp6_linuxx64_server_t.tar.gz
+
+# echo "911301ee155c5c0edf0af15074b2f67a2f54a3f8c866b156aca0f9b6fbd93be8  v10.5fp6_linuxx64_server_t.tar.gz" | sha256sum -c -
+# v10.5fp6_linuxx64_server_t.tar.gz: OK
+
+# docker pull ibmcom/db2express-c
+# https://hub.docker.com/r/ibmcom/db2express-c/
+
+
+
+# docker run -d --network=my_net -p 50000:50000 -h hadr1 --name=hadr1 -e DB2INST1_PASSWORD=db2inst1 -e LICENSE=accept -v /tmp/data:/home/db2inst1/data ibmcom/db2express-c:latest db2start
+# docker run -d --network=my_net -p 50001:50000 -h hadr2 --name=hadr2 -e DB2INST1_PASSWORD=db2inst1 -e LICENSE=accept -v /tmp/data:/home/db2inst1/data ibmcom/db2express-c:latest db2start
+
+# docker exec -it hadr1 bash
+# su - db2inst1
+
+-------------------
+hadr配置命令
+
+创建脚本/tmp/data/db2hadr1.sh db2hadr2.sh hadr1_init.sh hadr2_init.sh
+chmod 777 /tmp/data/*.sh
+
+创建网络my_net
+# docker network create --driver bridge --subnet 172.22.16.0/24 --gateway 172.22.16.1 my_net
+# brctl show
+# docker inspect my_net
+
+启动db2 环境
+# docker run -d --network=my_net -p 50000:50000 -h hadr1 --name=hadr1 -e DB2INST1_PASSWORD=db2inst1 -e LICENSE=accept -v /tmp/data:/home/db2inst1/data ibmcom/db2express-c:latest db2start
+# docker run -d --network=my_net -p 50001:50000 -h hadr2 --name=hadr2 -e DB2INST1_PASSWORD=db2inst1 -e LICENSE=accept -v /tmp/data:/home/db2inst1/data ibmcom/db2express-c:latest db2start
+
+配置hadr
+# docker exec -it hadr1 su - db2inst1 -c '/home/db2inst1/data/db2hadr1.sh'
+# docker exec -it hadr2 su - db2inst1 -c '/home/db2inst1/data/db2hadr2.sh'
+激活hadr
+# docker exec -it hadr2 su - db2inst1 -c '/home/db2inst1/data/hadr2_init.sh'
+# docker exec -it hadr1 su - db2inst1 -c '/home/db2inst1/data/hadr1_init.sh'
+
+进入容器命令行
+# docker exec -it hadr1 bash
+# docker exec -it hadr2 bash
+
+删除hadr 容器,并手工删除/tmp/data下的备份文件
+# docker rm hadr1 hadr2 -f
+
+=============================================ibmcom/db2express-c:latest
+1.创建hadr初始化脚本
+mkdir /tmp/data
+cd /tmp/data 
+创建4个脚本  db2hadr1.sh db2hadr2.sh hadr1_init.sh hadr2_init.sh
+chmod 777 *.sh
+
+2.创建网络my_net
+# docker network create --driver bridge --subnet 172.22.16.0/24 --gateway 172.22.16.1 my_net
+# brctl show
+# docker inspect my_net
+
+3.初始化脚本----hadr初始化，只用执行这个脚本，
+hadr_init.sh
+docker run -d --network=my_net -p 50000:50000 -h hadr1 --name=hadr1 -e DB2INST1_PASSWORD=db2inst1 -e LICENSE=accept -v /tmp/data:/home/db2inst1/data ibmcom/db2express-c:latest db2start
+docker run -d --network=my_net -p 50001:50000 -h hadr2 --name=hadr2 -e DB2INST1_PASSWORD=db2inst1 -e LICENSE=accept -v /tmp/data:/home/db2inst1/data ibmcom/db2express-c:latest db2start
+docker exec -it hadr1 su - db2inst1 -c '/home/db2inst1/data/db2hadr1.sh'
+docker exec -it hadr2 su - db2inst1 -c '/home/db2inst1/data/db2hadr2.sh'
+docker exec -it hadr2 su - db2inst1 -c '/home/db2inst1/data/hadr2_init.sh'
+docker exec -it hadr1 su - db2inst1 -c '/home/db2inst1/data/hadr1_init.sh'
+
+
+
+
+db2hadr1.sh
+--------------
+db2 create database db2hadr
+mkdir archivelog
+db2 update db cfg for db2hadr using logarchmeth1 disk:/home/db2inst1/archivelog
+db2 force applications all
+db2 backup db db2hadr to /home/db2inst1/data 
+db2 backup db db2hadr online to /home/db2inst1/data include logs| tee backup.log
+backup_timestamp=$(cat backup.log | cut -d":" -f2 | sed 's/ //g')
+echo ${backup_timestamp} > /home/db2inst1/data/backupid
+backup_file=$(ls data|grep $backup_timestamp)
+#rm -f /home/db2inst1/data/${backup_file}
+#db2 backup db db2hadr online to /home/db2inst1/data include logs
+
+#hadr1 configure
+db2set DB2_HADR_ROS=ON
+db2set DB2_STANDBY_ISO=UR
+db2set DB2_HADR_SOSNDBUF=1024000
+db2set DB2_HADR_SORCVBUF=1024000
+db2 update db cfg for db2hadr using HADR_LOCAL_HOST hadr1
+db2 update db cfg for db2hadr using HADR_LOCAL_SVC 60000
+db2 update db cfg for db2hadr using HADR_REMOTE_HOST hadr2
+db2 update db cfg for db2hadr using HADR_REMOTE_SVC 60000
+db2 update db cfg for db2hadr using HADR_REMOTE_INST db2inst1
+db2 update db cfg for db2hadr using HADR_TIMEOUT 120
+db2 update db cfg for db2hadr using HADR_SYNCMODE NEARSYNC
+db2 update db cfg for db2hadr using HADR_PEER_WINDOW 300
+db2 update db cfg for db2hadr using LOGINDEXBUILD ON
+-----------------
+
+db2hadr2.sh
+-----------------
+backup_path=/home/db2inst1/data
+backup_tmp=$(ls /home/db2inst1/data/*.001)
+backup_file=${backup_tmp##*/}
+backup_timestamp=$(echo $backup_file|cut -d "." -f5)
+#find $backup_path -cmin +10 -exec rm -f {} \;
+#avoid error SQL2043N  Unable to start a child process or thread.
+db2 create database db2hadr
+mkdir archivelog
+# restore database
+db2 restore db db2hadr from $backup_path taken at $backup_timestamp without prompting
+
+#hadr1 configure
+db2set DB2_HADR_ROS=ON
+db2set DB2_STANDBY_ISO=UR
+db2set DB2_HADR_SOSNDBUF=1024000
+db2set DB2_HADR_SORCVBUF=1024000
+db2 update db cfg for db2hadr using HADR_LOCAL_HOST hadr2
+db2 update db cfg for db2hadr using HADR_LOCAL_SVC 60000
+db2 update db cfg for db2hadr using HADR_REMOTE_HOST hadr1
+db2 update db cfg for db2hadr using HADR_REMOTE_SVC 60000
+db2 update db cfg for db2hadr using HADR_REMOTE_INST db2inst1
+db2 update db cfg for db2hadr using HADR_TIMEOUT 120
+db2 update db cfg for db2hadr using HADR_SYNCMODE NEARSYNC
+db2 update db cfg for db2hadr using HADR_PEER_WINDOW 300
+db2 update db cfg for db2hadr using LOGINDEXBUILD ON
+-----------------
+
+
+激活hadr 
+-----------------
+hadr2_init.sh
+-----------------
+db2stop force
+db2start
+db2 DEACTIVATE DATABASE db2hadr
+db2 start hadr on database db2hadr as standby
+db2pd -d db2hadr -hadr
+
+hadr1_init.sh
+-----------------
+db2stop force
+db2start
+db2 DEACTIVATE DATABASE db2hadr
+db2 start hadr on database db2hadr as primary
+db2pd -d db2hadr -hadr
+
+-----------------
+
+# docker exec -it hadr2 bash
+# su - db2inst1
+# ls data
+db2.sh  DB2HADR.0.db2inst1.DBPART000.20180804160841.001  hadr1.sh  hadr2.sh
+# db2 restore db db2hadr from /home/db2inst1 taken at 20180804160841 
+
+
+hadr2
+启动备用数据库：
+db2 DEACTIVATE DATABASE db2hadr
+db2 start hadr on database db2hadr as standby
+
+hadr1
+启动主数据库：
+db2 DEACTIVATE DATABASE db2hadr
+db2 start hadr on database db2hadr as primary
+
+hadr2
+on standby: takeover from primary to standby
+db2 takeover hadr on db db2hadr
+
+both (需要重启实例生效)  standby--只读
+db2set DB2_HADR_ROS=ON
+db2set DB2_STANDBY_ISO=UR
+db2set DB2_HADR_SOSNDBUF=1024000
+db2set DB2_HADR_SORCVBUF=1024000
+
+hadr1
+db2 connect to db2hadr
+db2 "create table t2(c1 varchar(10))"
+db2 "insert into t2 values(1)"
+db2 "insert into t2 values(2)"
+db2 "insert into t2 values(3)"
+db2 "insert into t2 values(4)"
+db2 "insert into t2 values(5)"
+db2 "insert into t2 values(6)"
+db2 "insert into t2 values(7)"
+db2 "insert into t2 values(8)"
+db2 "select * from t2"
+
+
+hadr2
+db2 connect to db2hadr
+db2 "select * from t2"
+
+----------------------------
+stop hadr
+停止备用数据库：
+db2 deactivate database db2hadr
+db2 stop hadr on database db2hadr 
+
+停止主数据库：
+db2 stop hadr on database db2hadr
+
+
+
+====================================================================================自定义 db2 dockerfile 步骤
+# docker build -t db210506 .
+
+挂载volume，启动db2容器
+# docker run -d --network=my_net -p 50002:50000 -h hadr --name=hadr -e DB2INST1_PASSWORD=db2inst1 -e HOSTNAME=hadr -v /tmp/data:/home/db2inst1/data db210506 db2start
+
+启动一个db2容器命令
+# docker run -d --network=my_net -p 50002:50000 -h hadr --name=hadr -e DB2INST1_PASSWORD=db2inst1 -e HOSTNAME=hadr db210506 db2start
+# docker exec -it hadr bash
+
+配置hadr
+docker run -d --network=my_net -p 50000:50000 -h hadr1 --name=hadr1 -e DB2INST1_PASSWORD=db2inst1 -e HOSTNAME=hadr1 -v /tmp/data:/home/db2inst1/data db210506:latest db2start
+docker run -d --network=my_net -p 50001:50000 -h hadr2 --name=hadr2 -e DB2INST1_PASSWORD=db2inst1 -e HOSTNAME=hadr2 -v /tmp/data:/home/db2inst1/data db210506:latest db2start
+docker exec -it hadr1 su - db2inst1 -c '/home/db2inst1/data/db2hadr1.sh'
+docker exec -it hadr2 su - db2inst1 -c '/home/db2inst1/data/db2hadr2.sh'
+docker exec -it hadr2 su - db2inst1 -c '/home/db2inst1/data/hadr2_init.sh'
+docker exec -it hadr1 su - db2inst1 -c '/home/db2inst1/data/hadr1_init.sh'
+
+--------------------------------------------------- Dockerfile
+FROM centos:7
+MAINTAINER Jason Yuan <lyuan@cn.ibm.com>
+RUN groupadd db2iadm1 && useradd -G db2iadm1 db2inst1
+RUN yum install -y \
+    vi \
+    sudo \
+    passwd \
+    pam \
+    pam.i686 \
+    ncurses-libs.i686 \
+    file \
+    libaio \
+    libstdc++-devel.i686 \
+    numactl-libs \
+    which \
+    && yum clean all
+
+ENV DB2EXPRESSC_DATADIR /home/db2inst1/data
+
+ARG DB2EXPRESSC_URL=http://9.98.12.150/ftp/MIDDLEWARE/DB2/v10.5.0.6/v10.5fp6_linuxx64_server_t.tar.gz
+ARG DB2EXPRESSC_SHA256=911301ee155c5c0edf0af15074b2f67a2f54a3f8c866b156aca0f9b6fbd93be8
+
+RUN curl -fSLo /tmp/v10.5fp6_linuxx64_server_t.tar.gz $DB2EXPRESSC_URL \
+    && echo "$DB2EXPRESSC_SHA256 /tmp/v10.5fp6_linuxx64_server_t.tar.gz" | sha256sum -c - \
+    && cd /tmp && tar xf v10.5fp6_linuxx64_server_t.tar.gz \
+    && su - db2inst1 -c "/tmp/server_t/db2_install -b /home/db2inst1/sqllib -p SERVER" \
+    && echo '. /home/db2inst1/sqllib/db2profile' >> /home/db2inst1/.bash_profile \
+    && rm -rf /tmp/v10.5fp6* && rm -rf /tmp/server_t* \
+    && sed -ri  's/(ENABLE_OS_AUTHENTICATION=).*/\1YES/g' /home/db2inst1/sqllib/instance/db2rfe.cfg \
+    && sed -ri  's/(RESERVE_REMOTE_CONNECTION=).*/\1YES/g' /home/db2inst1/sqllib/instance/db2rfe.cfg \
+    && sed -ri 's/^\*(SVCENAME=db2c_db2inst1)/\1/g' /home/db2inst1/sqllib/instance/db2rfe.cfg \
+    && sed -ri 's/^\*(SVCEPORT)=48000/\1=50000/g' /home/db2inst1/sqllib/instance/db2rfe.cfg \
+    && mkdir $DB2EXPRESSC_DATADIR && chown db2inst1.db2iadm1 $DB2EXPRESSC_DATADIR
+
+#RUN su - db2inst1 -c "db2start && db2set DB2COMM=TCPIP && db2 UPDATE DBM CFG USING DFTDBPATH $DB2EXPRESSC_DATADIR IMMEDIATE && db2 create database db2inst1" \
+
+RUN su - db2inst1 -c "db2start && db2set DB2COMM=TCPIP" \
+    && su - db2inst1 -c "db2stop force" \
+    && cd /home/db2inst1/sqllib/instance \
+    && ./db2rfe -f ./db2rfe.cfg
+
+COPY docker-entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+VOLUME $DB2EXPRESSC_DATADIR
+
+EXPOSE 50000
+
+=========================================================================docker-entrypoint.sh
+
+#!/bin/bash
+#
+#   Initialize DB2 instance in a Docker container
+#
+# # Authors:
+#   Jason Yuan <lyuan@cn.ibm.com>
+#   
+#
+# Copyright 2015, IBM Corporation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+pid=0
+
+function log_info {
+ echo -e $(date '+%Y-%m-%d %T')"\e[1;32m $@\e[0m"
+}
+function log_error {
+ echo -e >&2 $(date +"%Y-%m-%d %T")"\e[1;31m $@\e[0m"
+}
+
+function stop_db2 {
+  log_info "stopping database engine"
+  su - db2inst1 -c "db2stop force"
+}
+
+function start_db2 {
+  log_info "starting database engine"
+  su - db2inst1 -c "db2start"
+}
+
+function restart_db2 {
+  # if you just need to restart db2 and not to kill this container
+  # use docker kill -s USR1 <container name>
+  kill ${spid}
+  log_info "Asked for instance restart doing it..."
+  stop_db2
+  start_db2
+  log_info "database instance restarted on request"
+}
+
+function terminate_db2 {
+  kill ${spid}
+  stop_db2
+  if [ $pid -ne 0 ]; then
+    kill -SIGTERM "$pid"
+    wait "$pid"
+  fi
+  log_info "database engine stopped"
+  exit 0 # finally exit main handler script
+}
+
+trap "terminate_db2"  SIGTERM
+trap "restart_db2"   SIGUSR1
+
+if [ ! -f ~/db2inst1_pw_set ]; then
+  if [ -z "$DB2INST1_PASSWORD" ]; then
+    log_error "error: DB2INST1_PASSWORD not set"
+    log_error "Did you forget to add -e DB2INST1_PASSWORD=... ?"
+    exit 1
+  else
+    log_info "Setting db2inst1 user password..."
+    (echo "$DB2INST1_PASSWORD"; echo "$DB2INST1_PASSWORD") | passwd db2inst1 > /dev/null  2>&1
+    if [ $? != 0 ];then
+      log_error "Changing password for db2inst1 failed"
+      exit 1
+    fi
+    touch ~/db2inst1_pw_set
+  fi
+fi
+
+#if [ ! -f ~/db2_license_accepted ];then
+#  if [ -z "$LICENSE" ];then
+#     log_error "error: LICENSE not set"
+#     log_error "Did you forget to add '-e LICENSE=accept' ?"
+#     exit 1
+#  fi
+
+#  if [ "${LICENSE}" != "accept" ];then
+#     log_error "error: LICENSE not set to 'accept'"
+#     log_error "Please set '-e LICENSE=accept' to accept License before use the DB2 software contained in this image."
+#     exit 1#
+#  fi
+#  touch ~/db2_license_accepted
+#fi
+
+#setting db2nodes.cfg
+if [ -z "$HOSTNAME" ];then
+   log_error "db2nodes.cfg are not right. It should be changed."
+   exit 1
+else
+   log_info "setting db2nodes.cfg"
+   su - db2inst1 -c "echo '0 ${HOSTNAME} 0'>/home/db2inst1/sqllib/db2nodes.cfg"
+fi   
+
+# automatic to create sample database
+#if [ -f /home/db2inst1/sqllib/install/db2ls ];then
+#   su - db2inst1 -c "/home/db2inst1/sqllib/bin/db2sampl"
+#fi
+
+if [[ $1 == "db2start" ]]; then
+  log_info "Initializing container"
+  start_db2
+  log_info "Database db2diag log following"
+  tail -f ~db2inst1/sqllib/db2dump/db2diag.log &
+
+  # initial hadr
+#  if [ ! -f /home/db2inst1/data/hadr1.log ];then
+#    if [[ $HOSTNAME == 'hadr1' ]];then
+#      su - db2inst1 -c '/home/db2inst1/data/db2hadr1.sh'
+#      su - db2inst1 -c 'touch /home/db2inst1/data/hadr1.log'
+#      sleep 300
+#      su - db2inst1 -c '/home/db2inst1/data/hadr1_init.sh'
+#    else
+#      if [[ ! -f /home/db2inst1/data/hadr2.log && $HOSTNAME == 'hadr2' ]];then
+#        sleep 200
+#        su - db2inst1 -c '/home/db2inst1/data/db2hadr2.sh'
+#        su - db2inst1 -c '/home/db2inst1/data/hadr2_init.sh'
+#        su - db2inst1 -c 'touch /home/db2inst1/data/hadr2.log'
+#      fi
+##    fi  
+ # fi
+  
+  while true
+  do
+    if [[ $HOSTNAME == 'hadr1' ]];then
+      if [ ! -f /home/db2inst1/data/hadr1.log ];then
+        su - db2inst1 -c '/home/db2inst1/data/db2hadr1.sh'
+        su - db2inst1 -c 'touch /home/db2inst1/data/hadr1.log'
+      fi
+      if [ -f /home/db2inst1/data/hadr2.log ];then
+        su - db2inst1 -c '/home/db2inst1/data/hadr1_init.sh'
+        echo "hadr1 configure successfully!"
+        break
+      fi
+    fi
+
+    if [[ $HOSTNAME == 'hadr2' ]];then
+      if [ -f /home/db2inst1/data/hadr1.log ];then
+        su - db2inst1 -c '/home/db2inst1/data/db2hadr2.sh'
+        su - db2inst1 -c '/home/db2inst1/data/hadr2_init.sh'
+        su - db2inst1 -c 'touch /home/db2inst1/data/hadr2.log'
+        echo "hadr2 configure successfully!"
+        break
+      fi
+    fi
+  done
+
+
+  export pid=${!}
+  while true
+  do
+    sleep 10000 &
+    export spid=${!}
+    wait $spid
+  done
+else
+  exit 0
+fi
+
+=========================================================================================================
+
+docker run -d --network=my_net -p 50000:50000 -h hadr1 --name=hadr1 -e DB2INST1_PASSWORD=db2inst1 -e HOSTNAME=hadr1 -v /tmp/data:/home/db2inst1/data db210506:latest db2start
+docker run -d --network=my_net -p 50001:50000 -h hadr2 --name=hadr2 -e DB2INST1_PASSWORD=db2inst1 -e HOSTNAME=hadr2 -v /tmp/data:/home/db2inst1/data db210506:latest db2start
+docker exec -it hadr1 su - db2inst1 -c '/home/db2inst1/data/db2hadr1.sh'
+docker exec -it hadr2 su - db2inst1 -c '/home/db2inst1/data/db2hadr2.sh'
+docker exec -it hadr2 su - db2inst1 -c '/home/db2inst1/data/hadr2_init.sh'
+docker exec -it hadr1 su - db2inst1 -c '/home/db2inst1/data/hadr1_init.sh'
+
+docker-compose.yml
+------------------------
+version: '3'
+services: 
+  hadr1:
+    container_name: 'hadr1'
+    hostname: 'hadr1'
+    image: db210506
+    command: db2start
+    environment:
+      DB2INST1_PASSWORD: db2inst1
+      HOSTNAME: hadr1
+    ports:
+      - "50000:50000"
+    volumes:
+      - /tmp/data:/home/db2inst1/data   
+
+  hadr2:
+    container_name: 'hadr2'
+    hostname: 'hadr2'
+    image: db210506
+    command: db2start
+    environment:
+      DB2INST1_PASSWORD: db2inst1
+      HOSTNAME: hadr2
+    ports:
+      - "50001:50000"
+    depends_on: 
+      - hadr1  
+    volumes:
+      - /tmp/data:/home/db2inst1/data 
+
+======
+实施步骤
+1
+创建docker-entrypoint.sh Dockerfile db2hadr1.sh db2hadr2.sh hadr1_init.sh hadr2_init.sh docker-compose.yml文件 ，可以考虑git拉下来
+
+2.创建自定义db2 images
+docker build -t db210506 .
+
+3.启动容器
+docker-compose up
+
+删除容器
+docker-compose down
+rm -f /tmp/data/*.001
+rm -f /tmp/data/*.log
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,29 @@
+version: '3'
+services: 
+  hadr1:
+    container_name: 'hadr1'
+    hostname: 'hadr1'
+    image: db210506
+    command: db2start
+    environment:
+      DB2INST1_PASSWORD: db2inst1
+      HOSTNAME: hadr1
+    ports:
+      - "50000:50000"
+    volumes:
+      - /tmp/data:/home/db2inst1/data   
+
+  hadr2:
+    container_name: 'hadr2'
+    hostname: 'hadr2'
+    image: db210506
+    command: db2start
+    environment:
+      DB2INST1_PASSWORD: db2inst1
+      HOSTNAME: hadr2
+    ports:
+      - "50001:50000"
+    depends_on: 
+      - hadr1  
+    volumes:
+      - /tmp/data:/home/db2inst1/data 
