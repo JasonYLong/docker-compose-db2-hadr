@@ -27,7 +27,10 @@ ARG DB2EXPRESSC_SHA256=911301ee155c5c0edf0af15074b2f67a2f54a3f8c866b156aca0f9b6f
 ```
 
 ## 2.创建自定义db2 images
-docker build -t db210506 .
+
+```
+    #docker build -t db210506 .
+```
 
 ## 3.启动容器
 
@@ -38,9 +41,9 @@ docker build -t db210506 .
 ##删除容器
 
 ```
-    docker-compose down
-    rm -f /tmp/data/*.001
-    rm -f /tmp/data/*.log
+    #docker-compose down
+    #rm -f /tmp/data/*.001
+    #rm -f /tmp/data/*.log
 ```
 
 ## hadr 切换(from primary to standby)
