@@ -53,3 +53,27 @@ ARG DB2EXPRESSC_SHA256=911301ee155c5c0edf0af15074b2f67a2f54a3f8c866b156aca0f9b6f
     #db2 takeover hadr on db db2hadr
     #db2pd -d db2hadr -hadr
 ```
+
+## 使用已有镜像，搭建HADR 
+
+```
+   1.创建hadr初始化脚本
+   #mkdir /tmp/data
+   #cd /tmp/data 
+   创建4个脚本  db2hadr1.sh db2hadr2.sh hadr1_init.sh hadr2_init.sh
+   #chmod 777 *.sh
+
+   2.创建网络my_net
+   # docker network create --driver bridge --subnet 172.22.16.0/24 --gateway 172.22.16.1 my_net
+   # brctl show
+   # docker inspect my_net
+
+   3.初始化脚本----hadr初始化，只用执行这个脚本，
+   
+   #docker run -d --network=my_net -p 50000:50000 -h hadr1 --name=hadr1 -e DB2INST1_PASSWORD=db2inst1 -e LICENSE=accept -v /tmp/data:/home/db2inst1/data ibmcom/db2express-c:latest db2start
+   #docker run -d --network=my_net -p 50001:50000 -h hadr2 --name=hadr2 -e DB2INST1_PASSWORD=db2inst1 -e LICENSE=accept -v /tmp/data:/home/db2inst1/data ibmcom/db2express-c:latest db2start
+   #docker exec -it hadr1 su - db2inst1 -c '/home/db2inst1/data/db2hadr1.sh'
+   #docker exec -it hadr2 su - db2inst1 -c '/home/db2inst1/data/db2hadr2.sh'
+   #docker exec -it hadr2 su - db2inst1 -c '/home/db2inst1/data/hadr2_init.sh'
+   #docker exec -it hadr1 su - db2inst1 -c '/home/db2inst1/data/hadr1_init.sh'
+```
